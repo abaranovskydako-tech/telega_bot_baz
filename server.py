@@ -11,18 +11,19 @@ def home():
 
 def run_bot():
     # Импортируем и запускаем бота
-    from bot import setup_database, setup_handlers
+    from bot import setup_database, setup_handlers, bot as telegram_bot
     
     # Настройка базы данных и обработчиков
-    if bot.setup_database():
+    if setup_database():
         print("✅ Database connected successfully")
     else:
         print("⚠️ Database connection failed")
     
-    bot.setup_handlers()
+    setup_handlers()
     
     # Запуск бота в режиме polling
-    bot.bot.polling(none_stop=True)
+    print("🤖 Starting Telegram bot polling...")
+    telegram_bot.polling(none_stop=True)
 
 if __name__ == '__main__':
     threading.Thread(target=run_bot).start()
