@@ -1,7 +1,6 @@
 import telebot
 import os
 import logging
-from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from database import DatabaseManager
 
@@ -11,9 +10,6 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Initialize Flask app
-app = Flask(__name__)
 
 # Initialize bot
 bot = telebot.TeleBot(os.environ.get('TELEGRAM_BOT_TOKEN'))
@@ -188,8 +184,6 @@ if __name__ == '__main__':
     
     setup_handlers()
     
-    # Get port from environment or use default
-    port = int(os.environ.get('PORT', 5000))
-    
-    # Run Flask app
-    app.run(host='0.0.0.0', port=port, debug=False)
+    # Run bot in polling mode
+    logger.info("Starting Telegram bot...")
+    bot.polling(none_stop=True)
