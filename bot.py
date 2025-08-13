@@ -109,8 +109,8 @@ def setup_handlers():
             handle_citizenship_input(message, text)
         else:
             bot.reply_to(message, "❌ Неизвестное состояние. Используйте /start для начала нового опроса.")
-
-def handle_name_input(message, text):
+    
+    def handle_name_input(message, text):
     """Handle full name input."""
     user_id = message.from_user.id
     
@@ -129,7 +129,7 @@ def handle_name_input(message, text):
         f"Введите в формате ДД.ММ.ГГГГ (например: 15.03.1990)"
     )
 
-def handle_birth_date_input(message, text):
+    def handle_birth_date_input(message, text):
     """Handle birth date input."""
     user_id = message.from_user.id
     
@@ -165,7 +165,7 @@ def handle_birth_date_input(message, text):
     except ValueError:
         bot.reply_to(message, "❌ Неверная дата! Проверьте правильность введенной даты.")
 
-def handle_citizenship_input(message, text):
+    def handle_citizenship_input(message, text):
     """Handle citizenship input."""
     user_id = message.from_user.id
     
@@ -195,7 +195,7 @@ def handle_citizenship_input(message, text):
     else:
         bot.reply_to(message, "❌ Ошибка при сохранении данных. Попробуйте еще раз или используйте /cancel")
 
-def save_survey_data(user_id, data):
+    def save_survey_data(user_id, data):
     """Save survey data to database."""
     try:
         # Здесь должна быть логика сохранения в БД
@@ -206,7 +206,7 @@ def save_survey_data(user_id, data):
         logger.error(f"Error saving survey data: {e}")
         return False
 
-def create_survey_report(data):
+    def create_survey_report(data):
     """Create survey completion report."""
     report = (
         "🎉 Опрос завершен успешно!\n\n"
@@ -228,7 +228,6 @@ def create_survey_report(data):
         "Используйте /start для нового опроса."
     )
     return report
-
 
 
 if __name__ == '__main__':
