@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
+    startCommand: python server.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -16,3 +16,5 @@ services:
         value: ""
       - key: DB_PASSWORD
         value: ""
+      - key: WEBHOOK_URL
+        sync: false
