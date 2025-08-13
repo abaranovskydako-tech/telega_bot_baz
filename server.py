@@ -10,7 +10,7 @@ def home():
 
 def run_bot():
     # Импортируем и запускаем бота
-    from bot import setup_database, setup_handlers, bot as telegram_bot
+    from bot import setup_database, setup_handlers, bot
     
     # Настройка базы данных и обработчиков
     if setup_database():
@@ -22,7 +22,7 @@ def run_bot():
     
     # Запуск бота в режиме polling
     print("🤖 Запуск Telegram бота в режиме polling...")
-    telegram_bot.polling(none_stop=True)
+    bot.polling(none_stop=True)
 
 if __name__ == '__main__':
     threading.Thread(target=run_bot).start()
