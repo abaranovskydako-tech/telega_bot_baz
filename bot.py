@@ -127,53 +127,7 @@ def setup_handlers():
         )
         bot.reply_to(message, response)
 
-# Flask routes
-@app.route('/')
-def home():
-    """Home page for health check."""
-    return jsonify({
-        "status": "online",
-        "service": "Telegram Questionnaire Bot",
-        "message": "Bot is running successfully"
-    })
 
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    """Handle Telegram webhook."""
-    try:
-        update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
-        bot.process_new_updates([update])
-        return jsonify({"status": "ok"}), 200
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/health')
-def health():
-    """Health check endpoint."""
-    return jsonify({
-        "status": "healthy",
-        "database": "connected" if db_manager and db_manager.connection else "disconnected"
-    })
-
-@app.route('/set-webhook')
-def set_webhook():
-    """Set webhook URL for Telegram bot."""
-    try:
-        webhook_url = os.environ.get('WEBHOOK_URL')
-        if not webhook_url:
-            return jsonify({"error": "WEBHOOK_URL not set"}), 400
-        
-        bot.remove_webhook()
-        bot.set_webhook(url=webhook_url + '/webhook')
-        
-        return jsonify({
-            "status": "success",
-            "webhook_url": webhook_url + '/webhook'
-        })
-    except Exception as e:
-        logger.error(f"Webhook setup error: {e}")
-        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     # Setup database and handlers
