@@ -1,0 +1,15 @@
+# Исключаем ненужные файлы при развертывании
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+*.db
+.git/
+.gitignore
+README.md
+test_*.py
+init_database.py
