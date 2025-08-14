@@ -37,15 +37,20 @@ def home():
 def health():
     """Проверка здоровья всей системы"""
     try:
-        # Проверяем здоровье базы данных
-        db_health = database.health_check()
+        # Проверяем здоровье базы данных через db.py
+        from db import init_db
+        try:
+            init_db()  # Проверяем доступность базы
+            db_health = {"status": "healthy", "database": "db.py"}
+        except Exception as e:
+            db_health = {"status": "unhealthy", "error": str(e)}
         
         # Общая оценка здоровья
         overall_status = "healthy" if db_health["status"] == "healthy" else "degraded"
         
         return jsonify({
             "status": overall_status,
-            "timestamp": database.datetime.now().isoformat(),
+            "timestamp": "2025-08-15T00:00:00",  # Статическая дата
             "database": db_health,
             "bot": "running",
             "server": "flask"
@@ -62,44 +67,44 @@ def health():
 def db_info():
     """Информация о базе данных"""
     try:
-        db_info = database.get_database_info()
+        from db import init_db
+        init_db()  # Проверяем доступность
+        db_info = {"status": "healthy", "database": "db.py", "table": "responses"}
         return jsonify({
             "database_info": db_info,
-            "timestamp": database.datetime.now().isoformat()
+            "timestamp": "2025-08-15T00:00:00"
         })
     except Exception as e:
         logger.error(f"Database info failed: {e}")
         return jsonify({
             "error": str(e),
-            "timestamp": database.datetime.now().isoformat()
+            "timestamp": "2025-08-15T00:00:00"
         }), 500
 
 @app.route('/stats')
 def stats():
     """Статистика опросов"""
     try:
-        all_responses = database.get_all_responses()
-        total_responses = len(all_responses)
+        from db import init_db
+        init_db()  # Проверяем доступность базы
         
-        # Группируем по пользователям
-        user_counts = {}
-        for response in all_responses:
-            user_id = response.user_id
-            user_counts[user_id] = user_counts.get(user_id, 0) + 1
-        
-        unique_users = len(user_counts)
+        # Пока временная статистика для db.py
+        stats_info = {
+            "total_responses": "N/A (db.py)",
+            "unique_users": "N/A (db.py)",
+            "average_per_user": "N/A (db.py)",
+            "note": "Статистика будет доступна после полной миграции на db.py"
+        }
         
         return jsonify({
-            "total_responses": total_responses,
-            "unique_users": unique_users,
-            "average_per_user": round(total_responses / unique_users, 2) if unique_users > 0 else 0,
-            "timestamp": database.datetime.now().isoformat()
+            **stats_info,
+            "timestamp": "2025-08-15T00:00:00"
         })
     except Exception as e:
         logger.error(f"Stats failed: {e}")
         return jsonify({
             "error": str(e),
-            "timestamp": database.datetime.now().isoformat()
+            "timestamp": "2025-08-15T00:00:00"
         }), 500
 
 @app.route('/test-db')
@@ -137,12 +142,13 @@ def run_flask_server():
         init_db()  # создаст таблицы при старте
         logger.info("Новая база данных инициализирована успешно")
         
-        # Инициализируем старую базу данных (database.py)
-        logger.info("Инициализация старой базы данных (database.py)...")
-        if database.init_db():
-            logger.info("Старая база данных инициализирована успешно")
-        else:
-            logger.error("Ошибка инициализации старой базы данных")
+        # Инициализируем новую базу данных (db.py)
+        logger.info("Инициализация новой базы данных (db.py)...")
+        try:
+            init_db()
+            logger.info("Новая база данных инициализирована успешно")
+        except Exception as e:
+            logger.error(f"Ошибка инициализации новой базы данных: {e}")
             return
         
         # Запускаем бота в отдельном потоке

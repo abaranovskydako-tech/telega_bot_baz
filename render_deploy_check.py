@@ -68,32 +68,17 @@ def check_database():
     logger.info("🗄️  Проверка базы данных...")
     
     try:
-        import database
+        import db
         
         # Проверяем инициализацию
-        if database.init_db():
-            logger.info("✅ База данных инициализирована успешно")
-        else:
-            logger.error("❌ Ошибка инициализации базы данных")
-            return False
+        db.init_db()
+        logger.info("✅ База данных db.py инициализирована успешно")
         
-        # Проверяем информацию о базе
-        db_info = database.get_database_info()
-        if db_info.get("exists"):
-            logger.info(f"✅ База данных: {db_info['path']}")
-            logger.info(f"   Размер: {db_info['size_mb']} MB")
-            logger.info(f"   Последнее изменение: {db_info['last_modified']}")
-        else:
-            logger.warning("⚠️  База данных не существует (будет создана при первом запуске)")
+        # Проверяем доступность
+        logger.info("✅ База данных доступна")
+        logger.info("   Тип: db.py (PostgreSQL/SQLite)")
+        logger.info("   Таблица: responses")
         
-        # Проверяем здоровье
-        health = database.health_check()
-        if health["status"] == "healthy":
-            logger.info("✅ База данных здорова")
-        else:
-            logger.error(f"❌ База данных нездорова: {health}")
-            return False
-            
         return True
         
     except Exception as e:

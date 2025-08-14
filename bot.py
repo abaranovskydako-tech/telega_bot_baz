@@ -121,9 +121,13 @@ def save_survey_data(user_id, data):
                 logger.error(f"Invalid date format: {birth_date}")
                 birth_date = None
         
-        # Сохраняем в базу данных
-        new_id = database.save_response(user_id, full_name, birth_date, citizenship)
-        logger.info(f"Survey data saved successfully for user {user_id} with ID {new_id}")
+        # Сохраняем в базу данных через общий слой db.py
+        from db import save_response
+        # Сохраняем каждый ответ отдельно
+        save_response(user_id, "ФИО", full_name)
+        save_response(user_id, "Дата рождения", birth_date)
+        save_response(user_id, "Гражданство", citizenship)
+        logger.info(f"Survey data saved successfully for user {user_id} via db.py")
         return True
     except Exception as e:
         logger.error(f"Error saving survey data: {e}")
@@ -167,9 +171,10 @@ def create_survey_report(data):
 def setup_database():
     """Setup database connection."""
     try:
-        # Инициализируем базу данных
-        database.init_db()
-        logger.info("Database initialized successfully")
+        # Инициализируем базу данных через db.py
+        from db import init_db
+        init_db()
+        logger.info("Database initialized successfully via db.py")
         return True
     except Exception as e:
         logger.error(f"Database connection error: {e}")

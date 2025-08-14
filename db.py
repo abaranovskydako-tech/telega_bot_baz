@@ -11,9 +11,9 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 def _normalize(url: str) -> str:
     if url and url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+psycopg://", 1)
+        return url.replace("postgres://", "postgresql+pg8000://", 1)
     if url and url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url.replace("postgresql://", "postgresql+pg8000://", 1)
     return url
 
 # 2) Выбираем: облако (PostgreSQL) или локально (SQLite)
@@ -23,7 +23,7 @@ else:
     db_url = "sqlite:///telega.db"
 
 # Отладочная печать без пароля
-_drv = "psycopg" if "+psycopg" in db_url else "default"
+_drv = "pg8000" if "+pg8000" in db_url else ("psycopg" if "+psycopg" in db_url else "default")
 _ver = sys.version.split()[0]
 _safe = re.sub(r"://[^:@]+:([^@]+)@", "://***:***@", db_url)
 print(f"[db] python={_ver} driver={_drv} url={_safe}")

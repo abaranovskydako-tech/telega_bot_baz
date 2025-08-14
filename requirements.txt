@@ -8,7 +8,7 @@ gunicorn==21.2.0
 
 # База данных
 SQLAlchemy==2.0.32
-psycopg[binary]==3.2.1
+pg8000==1.31.2
 
 # Утилиты для Render
 PyYAML==6.0.1
