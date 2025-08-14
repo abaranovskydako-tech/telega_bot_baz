@@ -1,5 +1,7 @@
 # db.py
 import os
+import sys
+import re
 from sqlalchemy import create_engine, text, Integer, Text, Column, DateTime, func
 from sqlalchemy.orm import sessionmaker, declarative_base
 from urllib.parse import urlparse
@@ -19,6 +21,12 @@ if DATABASE_URL:
     db_url = _normalize(DATABASE_URL)
 else:
     db_url = "sqlite:///telega.db"
+
+# Отладочная печать без пароля
+_drv = "psycopg" if "+psycopg" in db_url else "default"
+_ver = sys.version.split()[0]
+_safe = re.sub(r"://[^:@]+:([^@]+)@", "://***:***@", db_url)
+print(f"[db] python={_ver} driver={_drv} url={_safe}")
 
 # 3) Движок и сессии
 engine = create_engine(
