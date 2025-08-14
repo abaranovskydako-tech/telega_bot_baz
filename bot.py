@@ -3,10 +3,17 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 import os
 import logging
 import re
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 import database
 from data_generator import PersonalDataGenerator
+
+try:
+    from telebot.apihelper import ApiTelegramException
+except Exception:
+    class ApiTelegramException(Exception):
+        error_code = None
 
 # Load environment variables
 load_dotenv()
@@ -21,6 +28,9 @@ data_generator = PersonalDataGenerator()
 
 # User states for survey
 user_states = {}  # {user_id: {'state': 'waiting_name', 'data': {}}
+
+# Модульный флаг для защиты от двойного запуска
+BOT_RUNNING = False
 
 def create_main_menu_keyboard():
     """Создает главное меню с красивыми кнопками."""
@@ -121,13 +131,9 @@ def save_survey_data(user_id, data):
                 logger.error(f"Invalid date format: {birth_date}")
                 birth_date = None
         
-        # Сохраняем в базу данных через общий слой db.py
-        from db import save_response
-        # Сохраняем каждый ответ отдельно
-        save_response(user_id, "ФИО", full_name)
-        save_response(user_id, "Дата рождения", birth_date)
-        save_response(user_id, "Гражданство", citizenship)
-        logger.info(f"Survey data saved successfully for user {user_id} via db.py")
+        # Сохраняем в базу данных
+        new_id = database.save_response(user_id, full_name, birth_date, citizenship)
+        logger.info(f"Survey data saved successfully for user {user_id} with ID {new_id}")
         return True
     except Exception as e:
         logger.error(f"Error saving survey data: {e}")
@@ -171,10 +177,9 @@ def create_survey_report(data):
 def setup_database():
     """Setup database connection."""
     try:
-        # Инициализируем базу данных через db.py
-        from db import init_db
-        init_db()
-        logger.info("Database initialized successfully via db.py")
+        # Инициализируем базу данных
+        database.init_db()
+        logger.info("Database initialized successfully")
         return True
     except Exception as e:
         logger.error(f"Database connection error: {e}")
@@ -574,17 +579,50 @@ def setup_handlers():
 # --- универсальный запуск бота ---
 def run_bot():
     """Запуск телеграм-бота."""
-    # Setup database and handlers
-    if setup_database():
-        logger.info("Database connected successfully")
-    else:
-        logger.warning("Database connection failed")
+    global BOT_RUNNING
+    if BOT_RUNNING:
+        print("run_bot: already running, skip")
+        return
+    BOT_RUNNING = True
     
-    setup_handlers()
-    
-    # Run bot in polling mode
-    logger.info("Starting Telegram bot...")
-    bot.polling(none_stop=True)
+    try:
+        # Setup database and handlers
+        if setup_database():
+            logger.info("Database connected successfully")
+        else:
+            logger.warning("Database connection failed")
+        
+        setup_handlers()
+        
+        # Очистка webhook перед запуском polling
+        try:
+            bot.remove_webhook()
+            time.sleep(1)
+        except Exception as _e:
+            print("run_bot: remove_webhook warn:", _e)
+
+        # Запуск polling с retry при ошибке 409
+        attempts = 6
+        for i in range(1, attempts + 1):
+            try:
+                print(f"run_bot: starting polling (attempt {i}/{attempts})")
+                bot.infinity_polling(skip_pending=True)
+                print("run_bot: polling finished normally")
+                break
+            except ApiTelegramException as e:
+                code = getattr(e, "error_code", None)
+                if code == 409:
+                    print(f"run_bot: 409 Conflict — retry in 3s (attempt {i}/{attempts})")
+                    time.sleep(3)
+                    continue
+                raise
+            except Exception as e:
+                print("run_bot: unexpected error:", e)
+                time.sleep(3)
+        else:
+            print("run_bot: giving up after retries")
+    finally:
+        BOT_RUNNING = False
 
 if __name__ == "__main__":
     run_bot()
