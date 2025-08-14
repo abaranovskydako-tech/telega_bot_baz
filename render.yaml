@@ -3,18 +3,51 @@ services:
     name: telegram-questionnaire-bot
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      pip install -r requirements.txt
+      echo "Build completed successfully"
     startCommand: python server.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+        description: "Telegram Bot Token from @BotFather"
       - key: DATABASE_PATH
         value: ./questionnaire.db
-      - key: DB_USERNAME
-        value: ""
-      - key: DB_PASSWORD
-        value: ""
-      - key: WEBHOOK_URL
+        description: "SQLite database file path"
+      - key: RENDER
+        value: "true"
+        description: "Indicates running on Render platform"
+      - key: PORT
+        value: "10000"
+        description: "Port for Flask server (Render will override this)"
+      - key: LOG_LEVEL
+        value: "INFO"
+        description: "Logging level for the application"
+    healthCheckPath: /health
+    autoDeploy: true
+    branch: main
+    buildFilter:
+      paths:
+        - "*.py"
+        - "requirements.txt"
+        - "render.yaml"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: TELEGRAM_BOT_TOKEN
         sync: false
+        description: "Telegram Bot Token from @BotFather"
+      - key: DATABASE_PATH
+        value: ./questionnaire.db
+        description: "SQLite database file path"
+      - key: RENDER
+        value: "true"
+        description: "Indicates running on Render platform"
+      - key: PORT
+        value: "10000"
+        description: "Port for Flask server (Render will override this)"
+      - key: LOG_LEVEL
+        value: "INFO"
+        description: "Logging level for the application"

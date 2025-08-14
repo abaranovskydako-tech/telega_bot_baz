@@ -5,7 +5,7 @@ import logging
 import re
 from datetime import datetime
 from dotenv import load_dotenv
-from database import DatabaseManager
+import database
 from data_generator import PersonalDataGenerator
 
 # Load environment variables
@@ -17,11 +17,10 @@ logger = logging.getLogger(__name__)
 
 # Initialize bot
 bot = telebot.TeleBot(os.environ.get('TELEGRAM_BOT_TOKEN'))
-db_manager = None
 data_generator = PersonalDataGenerator()
 
 # User states for survey
-user_states = {}  # {user_id: {'state': 'waiting_name', 'data': {}}}
+user_states = {}  # {user_id: {'state': 'waiting_name', 'data': {}}
 
 def create_main_menu_keyboard():
     """Создает главное меню с красивыми кнопками."""
@@ -82,93 +81,164 @@ def create_date_format_keyboard():
     
     return keyboard
 
-    def create_survey_progress_keyboard():
-        """Создает клавиатуру для отображения прогресса опроса."""
-        keyboard = InlineKeyboardMarkup(row_width=1)
+def create_survey_progress_keyboard():
+    """Создает клавиатуру для отображения прогресса опроса."""
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    
+    keyboard.add(
+        InlineKeyboardButton("📊 Показать прогресс", callback_data="show_progress"),
+        InlineKeyboardButton("❌ Отменить опрос", callback_data="cancel_survey"),
+        InlineKeyboardButton("🔄 Начать заново", callback_data="restart_survey")
+    )
+    
+    return keyboard
+
+def create_new_survey_keyboard():
+    """Создает клавиатуру для завершения опроса с кнопкой нового опроса."""
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    
+    keyboard.add(
+        InlineKeyboardButton("🚀 Начать новый опрос", callback_data="new_survey")
+    )
+    
+    return keyboard
+
+def save_survey_data(user_id, data):
+    """Save survey data to database."""
+    try:
+        # Сохраняем только данные пользователя в новую БД
+        full_name = data.get('full_name', '')
+        birth_date = data.get('birth_date', '')
+        citizenship = data.get('citizenship', '')
         
-        keyboard.add(
-            InlineKeyboardButton("📊 Показать прогресс", callback_data="show_progress"),
-            InlineKeyboardButton("❌ Отменить опрос", callback_data="cancel_survey"),
-            InlineKeyboardButton("🔄 Начать заново", callback_data="restart_survey")
-        )
+        # Конвертируем дату из формата ДД.ММ.ГГГГ в формат для PostgreSQL
+        if birth_date:
+            try:
+                # Парсим дату и конвертируем в формат YYYY-MM-DD
+                parsed_date = datetime.strptime(birth_date, '%d.%m.%Y')
+                birth_date = parsed_date.strftime('%Y-%m-%d')
+            except ValueError:
+                logger.error(f"Invalid date format: {birth_date}")
+                birth_date = None
         
-        return keyboard
+        # Сохраняем в базу данных
+        new_id = database.save_response(user_id, full_name, birth_date, citizenship)
+        logger.info(f"Survey data saved successfully for user {user_id} with ID {new_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving survey data: {e}")
+        return False
+
+def create_survey_report(data):
+    """Create survey completion report showing only user-entered data."""
+    
+    # Определяем поля, которые пользователь ввел сам
+    user_entered_fields = {
+        'full_name': '👤 ФИО',
+        'birth_date': '📅 Дата рождения', 
+        'citizenship': '🌍 Гражданство'
+    }
+    
+    # Определяем поля, которые заполняются автоматически
+    auto_filled_fields = {
+        'phone_number': '📱 Телефон',
+        'email': '📧 Email',
+        'address': '🏠 Адрес',
+        'passport_series': '📄 Паспорт (серия)',
+        'passport_number': '📄 Паспорт (номер)',
+        'education': '🎓 Образование',
+        'occupation': '💼 Профессия',
+        'income_level': '💰 Уровень дохода',
+        'marital_status': '💍 Семейное положение',
+        'children_count': '👶 Дети'
+    }
+    
+    # Формируем отчет только с данными пользователя
+    report = "🎉 Опрос завершен успешно!\n\n"
+    report += "📋 Введенные вами данные:\n"
+    
+    for field, label in user_entered_fields.items():
+        if field in data and data[field]:
+            report += f"{label}: {data[field]}\n"
+    
+    report += "\n✅ Все данные сохранены в базе данных!"
+    
+    return report
+
+def setup_database():
+    """Setup database connection."""
+    try:
+        # Инициализируем базу данных
+        database.init_db()
+        logger.info("Database initialized successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Database connection error: {e}")
+        return False
+
+def setup_handlers():
+    """Setup all bot message handlers."""
     
     def handle_start_survey(message, user_id):
         """Handle start survey button."""
         user_states[user_id] = {'state': 'waiting_name', 'data': {}}
         
-        welcome_text = (
-            "🎯 Отлично! Начинаем опрос!\n\n"
-            "📝 Вопрос 1: Как вас зовут?\n\n"
-            "Введите ваше полное ФИО (например: Иванов Иван Иванович)"
+        bot.edit_message_text(
+            "📝 Начинаем опрос!\n\n"
+            "🌍 Вопрос 1: Введите ваше полное ФИО\n\n"
+            "Пример: Иванов Иван Иванович",
+            chat_id=message.chat.id,
+            message_id=message.message_id
         )
         
-        bot.edit_message_text(
-            welcome_text,
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            reply_markup=create_survey_progress_keyboard()
-        )
-    
+        # Отправляем сообщение с просьбой ввести ФИО
+        bot.send_message(message.chat.id, "✍️ Введите ваше ФИО:")
+
     def handle_help_info(message):
         """Handle help info button."""
         help_text = (
             "📚 Справка по боту\n\n"
-            "🎯 Этот бот предназначен для сбора персональных данных через форму опроса.\n\n"
-            "📋 Процесс опроса:\n"
-            "1. 📝 Введите ФИО\n"
-            "2. 📅 Введите дату рождения (ДД.ММ.ГГГГ)\n"
-            "3. 🌍 Укажите гражданство\n"
-            "4. 🔧 Остальные данные заполнятся автоматически\n\n"
-            "💡 Советы:\n"
-            "• Используйте кнопки для быстрого выбора\n"
-            "• Можно отменить опрос в любой момент\n"
-            "• Все данные сохраняются безопасно"
+            "Этот бот предназначен для сбора персональных данных через форму опроса.\n\n"
+            "Команды:\n"
+            "• /start - Начать опрос персональных данных\n"
+            "• /help - Эта справка\n"
+            "• /cancel - Отменить текущий опрос\n\n"
+            "Процесс опроса:\n"
+            "1. Введите ФИО\n"
+            "2. Введите дату рождения (ДД.ММ.ГГГГ)\n"
+            "3. Укажите гражданство\n"
+            "4. Получите отчет с вашими данными"
         )
-        
-        bot.edit_message_text(
-            help_text,
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            reply_markup=create_main_menu_keyboard()
-        )
-    
+        bot.edit_message_text(help_text, chat_id=message.chat.id, message_id=message.message_id)
+
     def handle_cancel_survey(message, user_id):
         """Handle cancel survey button."""
         if user_id in user_states:
             del user_states[user_id]
-        
-        cancel_text = "❌ Опрос отменен.\n\nИспользуйте /start для начала нового опроса."
-        
-        bot.edit_message_text(
-            cancel_text,
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            reply_markup=create_main_menu_keyboard()
-        )
-    
+            bot.edit_message_text("❌ Опрос отменен.", chat_id=message.chat.id, message_id=message.message_id)
+            bot.send_message(message.chat.id, "Используйте /start для начала нового опроса.")
+        else:
+            bot.answer_callback_query(message.id, "❌ У вас нет активного опроса.")
+
     def handle_new_survey(message, user_id):
         """Handle new survey button."""
+        # Сбрасываем состояние и начинаем заново
         user_states[user_id] = {'state': 'waiting_name', 'data': {}}
         
-        new_survey_text = (
-            "🔄 Новый опрос начат!\n\n"
-            "📝 Вопрос 1: Как вас зовут?\n\n"
-            "Введите ваше полное ФИО (например: Иванов Иван Иванович)"
+        bot.edit_message_text(
+            "🔄 Начинаем новый опрос!\n\n"
+            "🌍 Вопрос 1: Введите ваше полное ФИО\n\n"
+            "Пример: Иванов Иван Иванович",
+            chat_id=message.chat.id,
+            message_id=message.message_id
         )
         
-        bot.edit_message_text(
-            new_survey_text,
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            reply_markup=create_survey_progress_keyboard()
-        )
-    
+        bot.send_message(message.chat.id, "✍️ Введите ваше ФИО:")
+
     def handle_show_progress(message, user_id):
         """Handle show progress button."""
         if user_id not in user_states:
-            bot.answer_callback_query(message.id, "❌ Нет активного опроса")
+            bot.answer_callback_query(message.id, "❌ У вас нет активного опроса.")
             return
         
         current_state = user_states[user_id]['state']
@@ -176,45 +246,42 @@ def create_date_format_keyboard():
         
         progress_text = "📊 Прогресс опроса:\n\n"
         
-        if current_state == 'waiting_name':
-            progress_text += "🔄 Шаг 1: Ввод ФИО (не завершен)\n"
-            progress_text += "⏳ Шаг 2: Дата рождения (ожидает)\n"
-            progress_text += "⏳ Шаг 3: Гражданство (ожидает)"
-        elif current_state == 'waiting_birth_date':
-            progress_text += f"✅ Шаг 1: ФИО - {data.get('full_name', 'Не указано')}\n"
-            progress_text += "🔄 Шаг 2: Ввод даты рождения (не завершен)\n"
-            progress_text += "⏳ Шаг 3: Гражданство (ожидает)"
-        elif current_state == 'waiting_citizenship':
-            progress_text += f"✅ Шаг 1: ФИО - {data.get('full_name', 'Не указано')}\n"
-            progress_text += f"✅ Шаг 2: Дата рождения - {data.get('birth_date', 'Не указано')}\n"
-            progress_text += "🔄 Шаг 3: Ввод гражданства (не завершен)"
+        if 'full_name' in data:
+            progress_text += f"✅ ФИО: {data['full_name']}\n"
+        else:
+            progress_text += "❌ ФИО: не заполнено\n"
         
-        bot.edit_message_text(
-            progress_text,
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            reply_markup=create_survey_progress_keyboard()
-        )
-    
+        if 'birth_date' in data:
+            progress_text += f"✅ Дата рождения: {data['birth_date']}\n"
+        else:
+            progress_text += "❌ Дата рождения: не заполнено\n"
+        
+        if 'citizenship' in data:
+            progress_text += f"✅ Гражданство: {data['citizenship']}\n"
+        else:
+            progress_text += "❌ Гражданство: не заполнено\n"
+        
+        progress_text += f"\n🎯 Текущий этап: {current_state}"
+        
+        bot.edit_message_text(progress_text, chat_id=message.chat.id, message_id=message.message_id)
+
     def handle_restart_survey(message, user_id):
         """Handle restart survey button."""
+        # Сбрасываем состояние и начинаем заново
         user_states[user_id] = {'state': 'waiting_name', 'data': {}}
         
-        restart_text = (
+        bot.edit_message_text(
             "🔄 Опрос перезапущен!\n\n"
-            "📝 Вопрос 1: Как вас зовут?\n\n"
-            "Введите ваше полное ФИО (например: Иванов Иван Иванович)"
+            "🌍 Вопрос 1: Введите ваше полное ФИО\n\n"
+            "Пример: Иванов Иван Иванович",
+            chat_id=message.chat.id,
+            message_id=message.message_id
         )
         
-        bot.edit_message_text(
-            restart_text,
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            reply_markup=create_survey_progress_keyboard()
-        )
-    
+        bot.send_message(message.chat.id, "✍️ Введите ваше ФИО:")
+
     def handle_citizenship_selection(message, user_id, citizenship):
-        """Handle citizenship selection from buttons."""
+        """Handle citizenship selection from keyboard."""
         user_states[user_id]['data']['citizenship'] = citizenship
         user_states[user_id]['state'] = 'completed'
         
@@ -229,93 +296,166 @@ def create_date_format_keyboard():
         if save_survey_data(user_id, all_data):
             # Формируем отчет
             report = create_survey_report(all_data)
-            
-            # Создаем клавиатуру для завершения
-            completion_keyboard = InlineKeyboardMarkup(row_width=2)
-            completion_keyboard.add(
-                InlineKeyboardButton("🔄 Новый опрос", callback_data="new_survey"),
-                InlineKeyboardButton("📊 Показать данные", callback_data="show_data")
-            )
-            
-            bot.edit_message_text(
-                report,
-                chat_id=message.chat.id,
-                message_id=message.message_id,
-                reply_markup=completion_keyboard
-            )
+            bot.edit_message_text("✅ Гражданство выбрано!", chat_id=message.chat.id, message_id=message.message_id)
+            bot.send_message(message.chat.id, report, reply_markup=create_new_survey_keyboard())
             
             # Очищаем состояние пользователя
             del user_states[user_id]
         else:
-            bot.answer_callback_query(message.id, "❌ Ошибка при сохранении данных")
-    
+            bot.edit_message_text("❌ Ошибка при сохранении данных.", chat_id=message.chat.id, message_id=message.message_id)
+
     def handle_custom_citizenship(message, user_id):
-        """Handle custom citizenship input."""
+        """Handle custom citizenship input request."""
         user_states[user_id]['state'] = 'waiting_custom_citizenship'
         
-        custom_text = (
-            "✏️ Введите ваше гражданство вручную:\n\n"
-            "Например: Германия, Франция, США, Китай и т.д."
-        )
-        
         bot.edit_message_text(
-            custom_text,
+            "✏️ Введите ваше гражданство вручную:",
             chat_id=message.chat.id,
-            message_id=message.message_id,
-            reply_markup=create_survey_progress_keyboard()
+            message_id=message.message_id
         )
-    
+
     def handle_date_example(message, user_id, date_example):
         """Handle date example selection."""
         user_states[user_id]['data']['birth_date'] = date_example
         user_states[user_id]['state'] = 'waiting_citizenship'
         
-        date_text = (
-            f"✅ Дата рождения сохранена: {date_example}\n\n"
+        citizenship_text = (
+            f"✅ Дата рождения выбрана: {date_example}\n\n"
             f"🌍 Вопрос 3: Укажите ваше гражданство\n\n"
-            f"Выберите из списка или введите вручную:"
+            "Выберите из списка или введите вручную:"
         )
         
-        bot.edit_message_text(
-            date_text,
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            reply_markup=create_citizenship_keyboard()
-        )
-    
+        bot.edit_message_text(citizenship_text, chat_id=message.chat.id, message_id=message.message_id)
+        bot.send_message(message.chat.id, "Выберите гражданство:", reply_markup=create_citizenship_keyboard())
+
     def handle_date_manual(message, user_id):
-        """Handle manual date input."""
+        """Handle manual date input request."""
         user_states[user_id]['state'] = 'waiting_birth_date'
         
-        manual_text = (
-            "✏️ Введите дату рождения вручную:\n\n"
-            "Формат: ДД.ММ.ГГГГ\n"
-            "Например: 15.03.1990"
-        )
-        
         bot.edit_message_text(
-            manual_text,
+            "✏️ Введите дату рождения в формате ДД.ММ.ГГГГ\n\n"
+            "Пример: 15.03.1990",
             chat_id=message.chat.id,
-            message_id=message.message_id,
-            reply_markup=create_survey_progress_keyboard()
+            message_id=message.message_id
         )
 
-def setup_database():
-    """Initialize database connection."""
-    global db_manager
-    db_path = os.environ.get('DATABASE_PATH', './questionnaire.db')
-    username = os.environ.get('DB_USERNAME', '')
-    password = os.environ.get('DB_PASSWORD', '')
-    
-    db_manager = DatabaseManager(db_path, username, password)
-    
-    if not db_manager.connect():
-        logger.warning("Database connection failed")
-        return False
-    return True
+    def handle_name_input(message, text):
+        """Handle full name input."""
+        user_id = message.from_user.id
+        
+        # Проверяем, что введено ФИО (минимум 2 слова)
+        if len(text.split()) < 2:
+            bot.reply_to(message, "❌ Пожалуйста, введите полное ФИО (например: Иванов Иван Иванович)")
+            return
+        
+        # Сохраняем ФИО
+        user_states[user_id]['data']['full_name'] = text
+        user_states[user_id]['state'] = 'waiting_birth_date'
+        
+        bot.reply_to(message, 
+            f"✅ ФИО сохранено: {text}\n\n"
+            f"📅 Вопрос 2: Какая дата рождения?\n"
+            f"Введите в формате ДД.ММ.ГГГГ (например: 15.03.1990)",
+            reply_markup=create_date_format_keyboard()
+        )
 
-def setup_handlers():
-    """Setup all bot message handlers."""
+    def handle_birth_date_input(message, text):
+        """Handle birth date input."""
+        user_id = message.from_user.id
+        
+        # Проверяем формат даты (ДД.ММ.ГГГГ)
+        date_pattern = r'^\d{2}\.\d{2}\.\d{4}$'
+        if not re.match(date_pattern, text):
+            bot.reply_to(message, "❌ Неверный формат даты! Используйте формат ДД.ММ.ГГГГ (например: 15.03.1990)")
+            return
+        
+        try:
+            # Парсим дату для проверки корректности
+            birth_date = datetime.strptime(text, '%d.%m.%Y')
+            
+            # Проверяем, что дата не в будущем и не слишком старая
+            if birth_date > datetime.now():
+                bot.reply_to(message, "❌ Дата рождения не может быть в будущем!")
+                return
+            
+            if birth_date.year < 1900:
+                bot.reply_to(message, "❌ Дата рождения не может быть раньше 1900 года!")
+                return
+            
+            # Сохраняем дату рождения
+            user_states[user_id]['data']['birth_date'] = text
+            user_states[user_id]['state'] = 'waiting_citizenship'
+            
+            citizenship_text = (
+                f"✅ Дата рождения сохранена: {text}\n\n"
+                f"🌍 Вопрос 3: Укажите ваше гражданство\n\n"
+                "Выберите из списка или введите вручную:"
+            )
+            
+            bot.reply_to(message, citizenship_text, reply_markup=create_citizenship_keyboard())
+            
+        except ValueError:
+            bot.reply_to(message, "❌ Неверная дата! Проверьте правильность введенной даты.")
+
+    def handle_citizenship_input(message, text):
+        """Handle citizenship input."""
+        user_id = message.from_user.id
+        
+        # Проверяем, что введено гражданство
+        if len(text.strip()) < 2:
+            bot.reply_to(message, "❌ Пожалуйста, введите ваше гражданство.")
+            return
+        
+        # Сохраняем гражданство
+        user_states[user_id]['data']['citizenship'] = text.strip()
+        
+        # Генерируем случайные данные
+        full_name = user_states[user_id]['data']['full_name']
+        random_data = data_generator.generate_all_random_data(full_name)
+        
+        # Объединяем все данные
+        all_data = {**user_states[user_id]['data'], **random_data}
+        
+        # Сохраняем в базу данных
+        if save_survey_data(user_id, all_data):
+            # Формируем отчет
+            report = create_survey_report(all_data)
+            bot.reply_to(message, report, reply_markup=create_new_survey_keyboard())
+            
+            # Очищаем состояние пользователя
+            del user_states[user_id]
+        else:
+            bot.reply_to(message, "❌ Ошибка при сохранении данных. Попробуйте еще раз или используйте /cancel")
+
+    def handle_custom_citizenship_input(message, text):
+        """Handle custom citizenship input."""
+        user_id = message.from_user.id
+        
+        # Проверяем, что введено гражданство
+        if len(text.strip()) < 2:
+            bot.reply_to(message, "❌ Пожалуйста, введите ваше гражданство.")
+            return
+        
+        # Сохраняем гражданство
+        user_states[user_id]['data']['citizenship'] = text.strip()
+        
+        # Генерируем случайные данные
+        full_name = user_states[user_id]['data']['full_name']
+        random_data = data_generator.generate_all_random_data(full_name)
+        
+        # Объединяем все данные
+        all_data = {**user_states[user_id]['data'], **random_data}
+        
+        # Сохраняем в базу данных
+        if save_survey_data(user_id, all_data):
+            # Формируем отчет
+            report = create_survey_report(all_data)
+            bot.reply_to(message, report, reply_markup=create_new_survey_keyboard())
+            
+            # Очищаем состояние пользователя
+            del user_states[user_id]
+        else:
+            bot.reply_to(message, "❌ Ошибка при сохранении данных. Попробуйте еще раз или используйте /cancel")
     
     @bot.message_handler(commands=['start'])
     def start_command(message):
@@ -331,7 +471,6 @@ def setup_handlers():
             "📋 Что вас ждет:\n"
             "• 📝 3 простых вопроса\n"
             "• 🎨 Стильные кнопки для выбора\n"
-            "• 🔧 Автоматическое заполнение остальных данных\n"
             "• 📊 Красивый отчет по завершении\n\n"
             "Выберите действие:"
         )
@@ -352,7 +491,7 @@ def setup_handlers():
             "1. Введите ФИО\n"
             "2. Введите дату рождения (ДД.ММ.ГГГГ)\n"
             "3. Укажите гражданство\n"
-            "4. Остальные данные заполнятся автоматически"
+            "4. Получите отчет с вашими данными"
         )
         bot.reply_to(message, help_text)
     
@@ -428,128 +567,6 @@ def setup_handlers():
             handle_custom_citizenship_input(message, text)
         else:
             bot.reply_to(message, "❌ Неизвестное состояние. Используйте /start для начала нового опроса.")
-    
-    def handle_name_input(message, text):
-    """Handle full name input."""
-    user_id = message.from_user.id
-    
-    # Проверяем, что введено ФИО (минимум 2 слова)
-    if len(text.split()) < 2:
-        bot.reply_to(message, "❌ Пожалуйста, введите полное ФИО (например: Иванов Иван Иванович)")
-        return
-    
-    # Сохраняем ФИО
-    user_states[user_id]['data']['full_name'] = text
-    user_states[user_id]['state'] = 'waiting_birth_date'
-    
-    bot.reply_to(message, 
-        f"✅ ФИО сохранено: {text}\n\n"
-        f"📅 Вопрос 2: Какая дата рождения?\n"
-        f"Введите в формате ДД.ММ.ГГГГ (например: 15.03.1990)"
-    )
-
-    def handle_birth_date_input(message, text):
-    """Handle birth date input."""
-    user_id = message.from_user.id
-    
-    # Проверяем формат даты (ДД.ММ.ГГГГ)
-    date_pattern = r'^\d{2}\.\d{2}\.\d{4}$'
-    if not re.match(date_pattern, text):
-        bot.reply_to(message, "❌ Неверный формат даты! Используйте формат ДД.ММ.ГГГГ (например: 15.03.1990)")
-        return
-    
-    try:
-        # Парсим дату для проверки корректности
-        birth_date = datetime.strptime(text, '%d.%m.%Y')
-        
-        # Проверяем, что дата не в будущем и не слишком старая
-        if birth_date > datetime.now():
-            bot.reply_to(message, "❌ Дата рождения не может быть в будущем!")
-            return
-        
-        if birth_date.year < 1900:
-            bot.reply_to(message, "❌ Дата рождения не может быть раньше 1900 года!")
-            return
-        
-        # Сохраняем дату рождения
-        user_states[user_id]['data']['birth_date'] = text
-        user_states[user_id]['state'] = 'waiting_citizenship'
-        
-        citizenship_text = (
-            f"✅ Дата рождения сохранена: {text}\n\n"
-            f"🌍 Вопрос 3: Укажите ваше гражданство\n\n"
-            f"Выберите из списка или введите вручную:"
-        )
-        
-        bot.reply_to(message, citizenship_text, reply_markup=create_citizenship_keyboard())
-        
-    except ValueError:
-        bot.reply_to(message, "❌ Неверная дата! Проверьте правильность введенной даты.")
-
-    def handle_citizenship_input(message, text):
-    """Handle citizenship input."""
-    user_id = message.from_user.id
-    
-    # Проверяем, что введено гражданство
-    if len(text.strip()) < 2:
-        bot.reply_to(message, "❌ Пожалуйста, введите ваше гражданство.")
-        return
-    
-    # Сохраняем гражданство
-    user_states[user_id]['data']['citizenship'] = text.strip()
-    
-    # Генерируем случайные данные
-    full_name = user_states[user_id]['data']['full_name']
-    random_data = data_generator.generate_all_random_data(full_name)
-    
-    # Объединяем все данные
-    all_data = {**user_states[user_id]['data'], **random_data}
-    
-    # Сохраняем в базу данных
-    if save_survey_data(user_id, all_data):
-        # Формируем отчет
-        report = create_survey_report(all_data)
-        bot.reply_to(message, report)
-        
-        # Очищаем состояние пользователя
-        del user_states[user_id]
-    else:
-        bot.reply_to(message, "❌ Ошибка при сохранении данных. Попробуйте еще раз или используйте /cancel")
-
-    def save_survey_data(user_id, data):
-    """Save survey data to database."""
-    try:
-        # Здесь должна быть логика сохранения в БД
-        # Пока просто логируем
-        logger.info(f"Saving survey data for user {user_id}: {data}")
-        return True
-    except Exception as e:
-        logger.error(f"Error saving survey data: {e}")
-        return False
-
-    def create_survey_report(data):
-    """Create survey completion report."""
-    report = (
-        "🎉 Опрос завершен успешно!\n\n"
-        "📋 Введенные вами данные:\n"
-        f"👤 ФИО: {data['full_name']}\n"
-        f"📅 Дата рождения: {data['birth_date']}\n"
-        f"🌍 Гражданство: {data['citizenship']}\n\n"
-        "🔧 Автоматически заполненные данные:\n"
-        f"📱 Телефон: {data['phone_number']}\n"
-        f"📧 Email: {data['email']}\n"
-        f"🏠 Адрес: {data['address']}\n"
-        f"📄 Паспорт: {data['passport_series']} {data['passport_number']}\n"
-        f"🎓 Образование: {data['education']}\n"
-        f"💼 Профессия: {data['occupation']}\n"
-        f"💰 Уровень дохода: {data['income_level']}\n"
-        f"💍 Семейное положение: {data['marital_status']}\n"
-        f"👶 Дети: {data['children_count']}\n\n"
-        "✅ Все данные сохранены в базе данных!\n"
-        "Используйте /start для нового опроса."
-    )
-    return report
-
 
 if __name__ == '__main__':
     # Setup database and handlers
