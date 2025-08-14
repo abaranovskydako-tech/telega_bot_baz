@@ -4,16 +4,31 @@ import sys
 import re
 from sqlalchemy import create_engine, text, Integer, Text, Column, DateTime, func
 from sqlalchemy.orm import sessionmaker, declarative_base
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit, parse_qsl, urlencode
 
 # 1) Берём адрес базы из переменной окружения (environment variable)
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def _normalize(url: str) -> str:
-    if url and url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+pg8000://", 1)
-    if url and url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+pg8000://", 1)
+    if not url:
+        return url
+    # 1) Драйвер pg8000
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+pg8000://", 1)
+    elif url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+pg8000://", 1)
+
+    # 2) SSL для pg8000
+    if "+pg8000://" in url:
+        parts = urlsplit(url)
+        q = dict(parse_qsl(parts.query, keep_blank_values=True))
+        if "sslmode" in q:
+            if q["sslmode"] in ("require", "prefer", "allow"):
+                q.pop("sslmode", None)
+                q["ssl"] = "true"
+        elif "ssl" not in q:
+            q["ssl"] = "true"
+        url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), parts.fragment))
     return url
 
 # 2) Выбираем: облако (PostgreSQL) или локально (SQLite)
