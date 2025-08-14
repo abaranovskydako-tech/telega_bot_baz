@@ -568,7 +568,9 @@ def setup_handlers():
         else:
             bot.reply_to(message, "❌ Неизвестное состояние. Используйте /start для начала нового опроса.")
 
-if __name__ == '__main__':
+# --- универсальный запуск бота ---
+def run_bot():
+    """Запуск телеграм-бота."""
     # Setup database and handlers
     if setup_database():
         logger.info("Database connected successfully")
@@ -580,3 +582,6 @@ if __name__ == '__main__':
     # Run bot in polling mode
     logger.info("Starting Telegram bot...")
     bot.polling(none_stop=True)
+
+if __name__ == "__main__":
+    run_bot()
