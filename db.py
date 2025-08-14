@@ -2,6 +2,7 @@
 import os
 import sys
 import re
+import ssl
 from sqlalchemy import create_engine, text, Integer, Text, Column, DateTime, func
 from sqlalchemy.orm import sessionmaker, declarative_base
 from urllib.parse import urlparse, urlsplit, urlunsplit, parse_qsl, urlencode
@@ -18,16 +19,13 @@ def _normalize(url: str) -> str:
     elif url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+pg8000://", 1)
 
-    # 2) SSL для pg8000
+    # 2) SSL для pg8000 - убираем параметры из URL, SSL будет в connect_args
     if "+pg8000://" in url:
         parts = urlsplit(url)
         q = dict(parse_qsl(parts.query, keep_blank_values=True))
-        if "sslmode" in q:
-            if q["sslmode"] in ("require", "prefer", "allow"):
-                q.pop("sslmode", None)
-                q["ssl"] = "true"
-        elif "ssl" not in q:
-            q["ssl"] = "true"
+        # Удаляем SSL параметры, так как SSL будет настроен через connect_args
+        q.pop("ssl", None)
+        q.pop("sslmode", None)
         url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), parts.fragment))
     return url
 
@@ -41,13 +39,21 @@ else:
 _drv = "pg8000" if "+pg8000" in db_url else ("psycopg" if "+psycopg" in db_url else "default")
 _ver = sys.version.split()[0]
 _safe = re.sub(r"://[^:@]+:([^@]+)@", "://***:***@", db_url)
-print(f"[db] python={_ver} driver={_drv} url={_safe}")
+
+# Формируем connect_args в зависимости от драйвера
+connect_args = {}
+if db_url.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+elif "+pg8000" in db_url:
+    connect_args = {"ssl_context": ssl.create_default_context()}
+
+print(f"[db] driver={'pg8000' if '+pg8000' in db_url else 'other'} connect_args={list(connect_args.keys())}")
 
 # 3) Движок и сессии
 engine = create_engine(
     db_url,
     pool_pre_ping=True,
-    connect_args={"check_same_thread": False} if db_url.startswith("sqlite") else {}
+    connect_args=connect_args
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
