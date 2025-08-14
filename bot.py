@@ -131,7 +131,6 @@ def save_survey_data(user_id, data):
 
 def create_survey_report(data):
     """Create survey completion report showing only user-entered data."""
-    
     # Определяем поля, которые пользователь ввел сам
     user_entered_fields = {
         'full_name': '👤 ФИО',
@@ -178,7 +177,6 @@ def setup_database():
 
 def setup_handlers():
     """Setup all bot message handlers."""
-    
     def handle_start_survey(message, user_id):
         """Handle start survey button."""
         user_states[user_id] = {'state': 'waiting_name', 'data': {}}

@@ -8,11 +8,10 @@ from urllib.parse import urlparse
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def _normalize(url: str) -> str:
-    # Render часто даёт postgres:// — нормализуем для SQLAlchemy
     if url and url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+        return url.replace("postgres://", "postgresql+psycopg://", 1)
     if url and url.startswith("postgresql://"):
-        return "postgresql+psycopg2://" + url.split("://", 1)[1]
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
     return url
 
 # 2) Выбираем: облако (PostgreSQL) или локально (SQLite)
