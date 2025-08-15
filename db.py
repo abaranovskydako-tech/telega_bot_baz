@@ -67,6 +67,16 @@ class Response(Base):
     answer = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
 
+# Модель для survey_responses
+class SurveyResponse(Base):
+    __tablename__ = "survey_responses"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False)
+    full_name = Column(Text, nullable=False)
+    birth_date = Column(Text, nullable=False)  # Храним как текст для совместимости
+    citizenship = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
 # 5) Инициализация схемы
 def init_db():
     Base.metadata.create_all(bind=engine)
@@ -76,3 +86,16 @@ def save_response(user_id: int, question: str, answer: str):
     with SessionLocal() as s:
         s.add(Response(user_id=user_id, question=question, answer=answer))
         s.commit()
+
+# Утилита сохранения для survey_responses
+def save_survey_response(user_id: int, full_name: str, birth_date: str, citizenship: str):
+    with SessionLocal() as s:
+        new_response = SurveyResponse(
+            user_id=user_id,
+            full_name=full_name,
+            birth_date=birth_date,
+            citizenship=citizenship
+        )
+        s.add(new_response)
+        s.commit()
+        return new_response.id

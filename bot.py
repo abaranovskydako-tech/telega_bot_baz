@@ -6,7 +6,7 @@ import re
 import time
 from datetime import datetime
 from dotenv import load_dotenv
-import database
+import db
 from data_generator import PersonalDataGenerator
 
 try:
@@ -132,7 +132,7 @@ def save_survey_data(user_id, data):
                 birth_date = None
         
         # Сохраняем в базу данных
-        new_id = database.save_response(user_id, full_name, birth_date, citizenship)
+        new_id = db.save_survey_response(user_id, full_name, birth_date, citizenship)
         logger.info(f"Survey data saved successfully for user {user_id} with ID {new_id}")
         return True
     except Exception as e:
@@ -178,7 +178,7 @@ def setup_database():
     """Setup database connection."""
     try:
         # Инициализируем базу данных
-        database.init_db()
+        db.init_db()
         logger.info("Database initialized successfully")
         return True
     except Exception as e:
