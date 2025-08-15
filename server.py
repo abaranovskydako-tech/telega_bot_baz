@@ -37,20 +37,15 @@ def home():
 def health():
     """Проверка здоровья всей системы"""
     try:
-        # Проверяем здоровье базы данных через db.py
-        from db import init_db
-        try:
-            init_db()  # Проверяем доступность базы
-            db_health = {"status": "healthy", "database": "db.py"}
-        except Exception as e:
-            db_health = {"status": "unhealthy", "error": str(e)}
+        # Проверяем здоровье базы данных
+        db_health = database.health_check()
         
         # Общая оценка здоровья
         overall_status = "healthy" if db_health["status"] == "healthy" else "degraded"
         
         return jsonify({
             "status": overall_status,
-            "timestamp": "2025-08-15T00:00:00",  # Статическая дата
+            "timestamp": database.datetime.now().isoformat(),
             "database": db_health,
             "bot": "running",
             "server": "flask"
@@ -67,18 +62,16 @@ def health():
 def db_info():
     """Информация о базе данных"""
     try:
-        from db import init_db
-        init_db()  # Проверяем доступность
-        db_info = {"status": "healthy", "database": "db.py", "table": "responses"}
+        db_info = database.get_database_info()
         return jsonify({
             "database_info": db_info,
-            "timestamp": "2025-08-15T00:00:00"
+            "timestamp": database.datetime.now().isoformat()
         })
     except Exception as e:
         logger.error(f"Database info failed: {e}")
         return jsonify({
             "error": str(e),
-            "timestamp": "2025-08-15T00:00:00"
+            "timestamp": database.datetime.now().isoformat()
         }), 500
 
 @app.route('/stats')
@@ -106,6 +99,31 @@ def stats():
             "error": str(e),
             "timestamp": "2025-08-15T00:00:00"
         }), 500
+
+@app.route("/_diag/db")
+def diag_db():
+    """Диагностика базы данных survey_responses"""
+    try:
+        from db import engine, SessionLocal, SurveyResponse
+        out = {"ok": True, "dialect": engine.dialect.name}
+        s = SessionLocal()
+        try:
+            out["count"] = s.query(SurveyResponse).count()
+            last = s.query(SurveyResponse).order_by(SurveyResponse.id.desc()).first()
+            if last:
+                out["last"] = {
+                    "id": last.id,
+                    "user_id": last.user_id,
+                    "full_name": last.full_name,
+                    "birth_date": last.birth_date,
+                    "citizenship": last.citizenship,
+                    "created_at": str(getattr(last, "created_at", None)) if getattr(last, "created_at", None) else None,
+                }
+        finally:
+            s.close()
+        return jsonify(out), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route('/test-db')
 def test_db():
@@ -142,13 +160,12 @@ def run_flask_server():
         init_db()  # создаст таблицы при старте
         logger.info("Новая база данных инициализирована успешно")
         
-        # Инициализируем новую базу данных (db.py)
-        logger.info("Инициализация новой базы данных (db.py)...")
-        try:
-            init_db()
-            logger.info("Новая база данных инициализирована успешно")
-        except Exception as e:
-            logger.error(f"Ошибка инициализации новой базы данных: {e}")
+        # Инициализируем старую базу данных (database.py)
+        logger.info("Инициализация старой базы данных (database.py)...")
+        if database.init_db():
+            logger.info("Старая база данных инициализирована успешно")
+        else:
+            logger.error("Ошибка инициализации старой базы данных")
             return
         
         # Запускаем бота в отдельном потоке
