@@ -9,6 +9,20 @@ from urllib.parse import urlparse, urlsplit, urlunsplit, parse_qsl, urlencode
 
 # 1) Берём адрес базы из переменной окружения (environment variable)
 DATABASE_URL = os.getenv("DATABASE_URL")
+LOCAL_SQLITE = os.getenv("LOCAL_SQLITE", "0").lower() in ("1", "true", "yes")
+
+def mask_password(url):
+    """Маскирует пароль в URL для безопасного логирования"""
+    if not url:
+        return url
+    parts = url.split('@')
+    if len(parts) == 2:
+        auth_part = parts[0].split('://')[1]
+        if ':' in auth_part:
+            username, password = auth_part.split(':', 1)
+            masked_url = url.replace(f":{password}@", ":***@")
+            return masked_url
+    return url
 
 def _normalize(url: str) -> str:
     if not url:
@@ -32,8 +46,28 @@ def _normalize(url: str) -> str:
 # 2) Выбираем: облако (PostgreSQL) или локально (SQLite)
 if DATABASE_URL:
     db_url = _normalize(DATABASE_URL)
-else:
+    print(f"[db] Используется PostgreSQL: {mask_password(db_url)}")
+elif LOCAL_SQLITE:
     db_url = "sqlite:///telega.db"
+    print(f"[db] ЛОКАЛЬНАЯ РАЗРАБОТКА: SQLite включен явно (LOCAL_SQLITE=1)")
+else:
+    error_msg = """
+[db] КРИТИЧЕСКАЯ ОШИБКА: Не настроена база данных!
+
+Для продакшена (PostgreSQL):
+- Установите переменную DATABASE_URL
+
+Для локальной разработки (SQLite):
+- Установите LOCAL_SQLITE=1
+
+Примеры:
+export DATABASE_URL="postgresql+pg8000://user:pass@host:5432/db"
+export LOCAL_SQLITE=1
+
+Сервис остановлен для предотвращения записи в локальную БД.
+"""
+    print(error_msg)
+    sys.exit(1)
 
 # Отладочная печать без пароля
 _drv = "pg8000" if "+pg8000" in db_url else ("psycopg" if "+psycopg" in db_url else "default")
